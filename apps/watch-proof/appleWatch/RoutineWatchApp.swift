@@ -348,7 +348,7 @@ private struct OrbitFace:View {
     @State private var dayBrowse:Int?
     @State private var browsing:Int?;@State private var root=OrbitFace.verificationDay;@State private var detail=false;@State private var detailStep:Int?
     @State private var overlay=false;@State private var selection = -1
-    @State private var turn=0.0;@State private var orbitStep=9.0;@State private var lastParent="";@State private var clock=Date()
+    @State private var turn=0.0;@State private var zoom=1.0;@State private var orbitStep=9.0;@State private var lastParent="";@State private var clock=Date()
     @State private var crown=0.0;@State private var lastCrown=0.0;@State private var titleHeight=0.0
     @State private var contact:String?;@State private var began:CGPoint = .zero;@State private var moved=false
     @State private var hold=WatchHold();@State private var timer:Task<Void,Never>?
@@ -497,7 +497,7 @@ private struct OrbitFace:View {
                                     }
                                 }
                             }
-                        }.rotationEffect(.degrees(root ? 0:turn),anchor:UnitPoint(x:0,y:0.5)).mask { Rectangle().frame(height:max(0,footer-OrbitFace.ctaHeight/2-4-(OrbitFace.titleY(h)+OrbitFace.titleBox/2+2))).position(x:w/2,y:(footer-OrbitFace.ctaHeight/2-4+OrbitFace.titleY(h)+OrbitFace.titleBox/2+2)/2) }.accessibilityHidden(true)
+                        }.rotationEffect(.degrees(root ? 0:turn),anchor:UnitPoint(x:0,y:0.5)).scaleEffect(zoom).opacity(0.35+0.65*max(0,1-abs(zoom-1)/0.8)).mask { Rectangle().frame(height:max(0,footer-OrbitFace.ctaHeight/2-4-(OrbitFace.titleY(h)+OrbitFace.titleBox/2+2))).position(x:w/2,y:(footer-OrbitFace.ctaHeight/2-4+OrbitFace.titleY(h)+OrbitFace.titleBox/2+2)/2) }.accessibilityHidden(true)
                         Canvas {ctx,size in
                             let c=CGPoint(x:w/2,y:h/2)
                             if windowShown,let a=winStart,let b=winEnd {
@@ -595,6 +595,8 @@ private struct OrbitFace:View {
         }.ignoresSafeArea().preferredColorScheme(.light)
         .task(id:"\(startMillis ?? 0):\(day.count)"){while !Task.isCancelled{try? await Task.sleep(nanoseconds:1_000_000_000);clock=Date()}}
         .onAppear{lastParent=parent}
+        // Zoom between levels (step orbit ↔ My routine), like the phone: the new orbit grows out of / shrinks into the current planet.
+        .onChange(of:root){_,day in if !reduceMotion{zoom=day ? 1.8:0.5;withAnimation(.timingCurve(0.2,0.7,0.2,1,duration:0.32)){zoom=1}}}
         .onChange(of:currentId){_,_ in if lastParent==parent && !reduceMotion{turn=orbitStep;withAnimation(.easeOut(duration:0.24)){turn=0}};lastParent=parent}
         .onChange(of:token){_,_ in home()}.onChange(of:busy){_,v in if v{cancel()}}.onChange(of:phase){_,v in if v != .active{cancel()}}.onDisappear{cancel()}
     }
