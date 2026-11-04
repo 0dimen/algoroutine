@@ -16,6 +16,33 @@ AlgoRoutine is a routine-and-schedule app for moments when your day suddenly fal
 8. **One step at a time on the watch.** Native watchOS (SwiftUI) and Wear OS (Compose) apps show the same orbit and only the current step.
 9. **Keep your place.** Interrupted runs stay where you left them. Moved plans keep their original time in their history.
 
+## Example routines
+
+A routine is a short list of small steps you write once, for a kind of moment. When that moment comes, you just say what's happening; AlgoRoutine picks the routine (or Meta drafts one), shifts the next hours around it, and shows one step at a time. These are examples — write your own in your own words.
+
+**When I'm suddenly overwhelmed** (the one in the demo is a shorter version)
+1. Take three slow breaths
+2. Put your phone face down
+3. Drink a glass of water
+4. Rest — your schedule is handled (rest 1–3 h; the app shifts what can move, required plans stay)
+
+**When I can't start a task**
+1. Open a blank document
+2. Write three headings
+3. Write one rough sentence
+
+**When my mind keeps wandering**
+1. Close every tab but one
+2. Set the next 10 minutes on the clock
+3. Do only the step in front of you — one tap brings you back if you drift
+
+**Grocery run in 20 minutes** (sample in the routine store)
+1. Write the 5 things you need
+2. Go aisle by aisle, list in hand
+3. Pay and head home
+
+These routines are everyday self-help steps, not medical advice. If you feel unsafe or in crisis, contact local emergency services or a crisis line.
+
 ## Meta models
 
 | Use | Model |
