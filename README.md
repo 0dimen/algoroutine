@@ -139,7 +139,9 @@ The watch apps build with Xcode (watchOS simulator) and Android SDK 35 (Wear OS 
 
 ## Demo video
 
-_Link coming soon._
+[![AlgoRoutine demo video](https://img.youtube.com/vi/YLBn9VvBgFQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=YLBn9VvBgFQ)
+
+▶ Watch on YouTube: https://www.youtube.com/watch?v=YLBn9VvBgFQ
 
 ## Limits
 
