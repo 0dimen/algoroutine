@@ -1,6 +1,6 @@
 import tempfile,unittest
 from pathlib import Path
-from store import Store,DomainError
+from store import Store,DomainError,CATALOG
 from search import search,candidate_snapshot
 class SearchTests(unittest.TestCase):
  def setUp(self):
@@ -40,7 +40,7 @@ class SearchTests(unittest.TestCase):
   self.assertEqual(search(self.store,'우주 정비')['items'],[])
   snapshot=candidate_snapshot(self.store)
   self.assertTrue(snapshot['complete']);self.assertFalse(snapshot['filtered'])
-  self.assertEqual({x['id'] for x in snapshot['items']},{mine['id'],collected['id']})
+  self.assertEqual({x['id'] for x in snapshot['items']},{mine['id'],collected['id']}|{r['id'] for r in CATALOG if r['id']!='report-start'})
   self.assertEqual(snapshot['libraryRevision'],self.store.library()['revision'])
  def test_query_validation(self):
   for q in [None,[],1,'a'*501]:

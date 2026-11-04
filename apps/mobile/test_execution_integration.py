@@ -108,6 +108,10 @@ class GapIntegration(IntegrationFixture):
    return self.call('/api/execution/command',{'id':str(uuid.uuid4()),'kind':'start','occurrenceId':occ,'expectedRevision':w['revision'],'definition':{'id':r['id'],'version':1,'title':'fake','author':'fake','description':'fake','steps':[]}})
   out=start(b,'reserved-b');self.assertTrue(out['result']['accepted']);run=out['context']['workspace']['runs'][0]
   self.assertEqual(run['definition']['description'],'선택한 설명');self.assertEqual([x['id'] for x in out['context']['reservation']['candidates']],['a'])
+  # "My routine" (day level): the started reservation is shown once, as its run; the other stays a reservation. Read-only.
+  day=out['context']['day'];self.assertEqual([(x['kind'],x['id']) for x in day],[('run','reserved-b'),('reservation','a')])
+  self.assertEqual(day[0]['startMillis'],now-1000);self.assertEqual(day[0]['position'],1);self.assertEqual(day[0]['total'],1)
+  self.assertEqual(self.call('/api/execution/context')['workspace'],out['context']['workspace'])
   command('saveDefinition',definitionId=b['id'],expectedVersion=1,content={'title':'바꾼 제목','description':'바꾼 설명','steps':[{'id':'x','title':'바꾼 행동'}]})
   self.assertEqual(self.call('/api/execution/context')['workspace']['runs'][0],run)
   # A short reservation expires without context polling; ticker records the event durably.

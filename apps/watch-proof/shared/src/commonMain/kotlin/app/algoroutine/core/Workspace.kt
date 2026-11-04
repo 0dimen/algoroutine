@@ -46,7 +46,8 @@ class WorkspaceEngine {
                 if(c.expectedRevision!=revision) return reject("STALE_REVISION")
                 if(c.unitId!=null || c.expectedFocusRevision!=null) return reject("INVALID_COMMAND")
                 val d=c.definition ?: return reject("INVALID_DEFINITION")
-                if(d.id.isBlank() || d.version<1 || d.title.isBlank() || d.author.isBlank() || d.steps.isEmpty() || d.steps.size>50 || d.steps.any{it.id.isBlank()||it.title.isBlank()} || d.steps.map{it.id}.toSet().size!=d.steps.size) return reject("INVALID_DEFINITION")
+                // Zero steps = a plain schedule: only with a time window; it stays running until Done (completeParent) or its end.
+                if(d.id.isBlank() || d.version<1 || d.title.isBlank() || d.author.isBlank() || (d.steps.isEmpty() && d.windowStartMillis==null) || d.steps.size>50 || d.steps.any{it.id.isBlank()||it.title.isBlank()} || d.steps.map{it.id}.toSet().size!=d.steps.size) return reject("INVALID_DEFINITION")
                 if((d.windowStartMillis==null)!=(d.windowEndMillis==null) || (d.windowStartMillis!=null && d.windowStartMillis>=d.windowEndMillis!!)) return reject("INVALID_WINDOW")
                 if(d.windowStartMillis!=null && atMillis<d.windowStartMillis)return reject("EARLY_START")
                 if(d.windowEndMillis!=null && atMillis>=d.windowEndMillis)return reject("WINDOW_ELAPSED")
@@ -84,7 +85,7 @@ class WorkspaceEngine {
                     r.queue.forEach { r.statuses[it]="excluded" };r.queue.clear()
                     r.status="completed";r.evidence="direct_parent"
                 } else {
-                    if(r.status!="running" || c.unitId!=r.queue.firstOrNull()) return reject("WRONG_TARGET")
+                    if(r.status!="running" || r.queue.isEmpty() || c.unitId!=r.queue.first()) return reject("WRONG_TARGET")
                     val id=r.queue.first()
                     when(c.kind) {
                         "defer" -> {

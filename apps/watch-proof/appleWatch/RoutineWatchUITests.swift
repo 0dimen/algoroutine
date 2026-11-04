@@ -339,3 +339,29 @@ final class RemainingWatchFlowTests: XCTestCase {
   _ = try api("/__mode",["mode":"search_error"]);app.buttons["찾기"].tap();XCTAssertTrue(app.staticTexts["연결을 확인해 주세요"].waitForExistence(timeout:10));capture("search-error");_ = try api("/__mode",["mode":"normal"]);app.buttons["다시"].tap();XCTAssertTrue(app.buttons["시작"].waitForExistence(timeout:10));capture("search-recovered")
  }
 }
+
+/// "My routine" day level on a disposable rest_demo fixture (execution 8793, mobile 8794), clock 17:02 after the rest plan.
+/// Set DAY_SHOTS to a directory to save screenshots. Browsing must not change runs or reservations.
+final class DayLevelTests: XCTestCase {
+ let app=XCUIApplication(bundleIdentifier:"app.algoroutine.watchproof")
+ override func setUpWithError() throws {continueAfterFailure=false}
+ func get(_ url:String) throws->Data {
+  let e=expectation(description:url);var data:Data?;URLSession.shared.dataTask(with:URL(string:url)!){d,_,_ in data=d;e.fulfill()}.resume();wait(for:[e],timeout:15);return try XCTUnwrap(data)
+ }
+ func state() throws->Data {var out=try get("http://127.0.0.1:8793/context");let w=try JSONSerialization.jsonObject(with:out) as! [String:Any];out=try JSONSerialization.data(withJSONObject:[w["workspace"]!,try JSONSerialization.jsonObject(with:get("http://127.0.0.1:8794/api/execution/reservations"))],options:.sortedKeys);return out}
+ func el(_ label:String)->XCUIElement{app.descendants(matching:.any).matching(NSPredicate(format:"label == %@",label)).firstMatch}
+ func shot(_ name:String){sleep(1);let dir=ProcessInfo.processInfo.environment["DAY_SHOTS"] ?? "/tmp";try? app.screenshot().pngRepresentation.write(to:URL(fileURLWithPath:dir).appendingPathComponent(name+".png"))}
+ func testStepToDayBrowseAndBack() throws {
+  app.terminate();app.launchArguments=["-demo-server","-verification-port","8793","-app-language","en"];app.launch()
+  XCTAssertTrue(el("Details: Write a working heading").waitForExistence(timeout:20));shot("watch-step")
+  let before=try state()
+  el("Parent: Start a report").tap()
+  XCTAssertTrue(el("Details: Start a report").waitForExistence(timeout:5));XCTAssertTrue(el("My routine").exists);shot("watch-day")
+  for _ in 0..<3 {app.swipeUp();usleep(400_000)}
+  XCTAssertTrue(el("Details: Team sync").waitForExistence(timeout:5));XCTAssertTrue(el("Current").exists);shot("watch-browse")
+  XCTAssertEqual(try state(),before,"browsing changed state")
+  el("Current").tap();XCTAssertTrue(el("Details: Start a report").waitForExistence(timeout:5))
+  el("Details: Start a report").tap();XCTAssertTrue(el("Details: Write a working heading").waitForExistence(timeout:5))
+  XCTAssertEqual(try state(),before)
+ }
+}

@@ -63,8 +63,21 @@ private class Service(private val directory:Path,private val library:String,priv
     }
     private fun context(store:WorkspaceStore,now:Long):JsonObject {
         val view=store.view();val done=view.runs.map{it.id}.toSet()
-        val selected=ScheduleSelector().select(schedules().filter{it.occurrenceId !in done},now,true)
-        return buildJsonObject{put("workspace",json.encodeToJsonElement(view));put("reservation",json.encodeToJsonElement(selected));put("serverNow",now)}
+        val all=schedules();val selected=ScheduleSelector().select(all.filter{it.occurrenceId !in done},now,true)
+        // "My routine": today's running routines and reservations in time order (read-only, local day).
+        val zone=java.time.ZoneId.systemDefault();val today=java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val dayStart=today.atStartOfDay(zone).toInstant().toEpochMilli();val dayEnd=today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val day=DayOrbit.items(view.runs,all,DayOrbit.startTimes(store.events()),now,dayStart,dayEnd)
+        // Orbit time scales per depth (shared core OrbitScales) + wall-clock ticks for this instant, so the phone only draws.
+        val zoneOffset=zone.rules.getOffset(java.time.Instant.ofEpochMilli(now)).totalSeconds*1000L
+        val orbit=buildJsonObject{for(sc in OrbitScales.all) put(sc.depth,buildJsonObject{put("scale",json.encodeToJsonElement(sc));put("ticks",json.encodeToJsonElement(OrbitScales.ticks(sc,now,zoneOffset)))})}
+        // The orbit is one clock (shared core OrbitClock): every node at its time, the current item at now with its timer span.
+        val events=store.events()
+        val clockSlots=buildJsonObject{
+            put("day",json.encodeToJsonElement(OrbitClock.day(day,view.runs,events,view.focusId,now)))
+            put("runs",buildJsonObject{for(r in view.runs.filter{it.status=="running"}) put(r.id,json.encodeToJsonElement(OrbitClock.steps(r,events,now)))})
+        }
+        return buildJsonObject{put("workspace",json.encodeToJsonElement(view));put("reservation",json.encodeToJsonElement(selected));put("day",json.encodeToJsonElement(day));put("orbit",orbit);put("clock",clockSlots);put("serverNow",now)}
     }
     @Synchronized fun tick() {
         val store=engine();check(store.reconcile(clock())){store.error?:"EXPIRY_UNCONFIRMED"}
@@ -95,8 +108,11 @@ private class Service(private val directory:Path,private val library:String,priv
                     val reservation=schedules().firstOrNull{it.occurrenceId==c.occurrenceId}
                     if(reservation!=null) require(ref.id==reservation.definitionId&&ref.version==reservation.definitionVersion)
                     require(reservation!=null || !c.occurrenceId.startsWith("reserved-"))
+                    // A plain schedule has no library definition: it starts as a zero-step run with its own title.
+                    require(reservation!=null || ref.id!=ReservationKind.PLAIN_SCHEDULE_ID)
                     val saved=store.savedCommand(c.id)
-                    val frozen=if(saved?.kind=="start" && saved.definition?.id==ref.id && saved.definition?.version==ref.version) saved.definition!! else definition(ref.id,ref.version)
+                    val frozen=if(saved?.kind=="start" && saved.definition?.id==ref.id && saved.definition?.version==ref.version) saved.definition!!
+                        else if(reservation?.kind==ReservationKind.SCHEDULE) ReservationKind.plainDefinition(reservation) else definition(ref.id,ref.version)
                     c=c.copy(definition=if(reservation==null)frozen else frozen.copy(windowStartMillis=reservation.startMillis,windowEndMillis=reservation.endMillis))
                 }
                 val appliedAt=clock();check(store.reconcile(appliedAt)){store.error?:"EXPIRY_UNCONFIRMED"}
@@ -107,10 +123,12 @@ private class Service(private val directory:Path,private val library:String,priv
                 if(body!=null) {
                     val item=json.decodeFromString<Reservation>(body);require(item.id.matches(Regex("[A-Za-z0-9_-]+")))
                     require(item.startMillis<item.endMillis && item.endMillis>now)
-                    val d=definition(item.definitionId,item.definitionVersion)
+                    require(item.kind in setOf(ReservationKind.ROUTINE,ReservationKind.SCHEDULE)){"UNKNOWN_KIND"}
+                    // Plain schedule: no definition lookup; the user's title is kept (trimmed, 1..120 chars).
+                    val title=if(item.kind==ReservationKind.SCHEDULE) item.title.trim().also{require(it.length in 1..120)} else definition(item.definitionId,item.definitionVersion).title
                     require(item.deadlineMillis.let{it==null||it>=item.endMillis}){"DEADLINE_BEFORE_END"}
                     // Status/history are written only by the reschedule apply path.
-                    val items=schedules();val fixed=item.copy(title=d.title,occurrenceId="reserved-${item.id}",status=null,history=emptyList(),movable=item.movable&&!item.required)
+                    val items=schedules();val fixed=item.copy(title=title,definitionId=if(item.kind==ReservationKind.SCHEDULE)ReservationKind.PLAIN_SCHEDULE_ID else item.definitionId,definitionVersion=if(item.kind==ReservationKind.SCHEDULE)1 else item.definitionVersion,occurrenceId="reserved-${item.id}",status=null,history=emptyList(),movable=item.movable&&!item.required)
                     val existing=items.firstOrNull{it.id==item.id};require(existing==null||existing==fixed){"RESERVATION_CONFLICT"}
                     if(existing==null)check(scheduleStorage.write(json.encodeToString(items+fixed))){"WRITE_UNCONFIRMED"}
                 }

@@ -96,7 +96,12 @@ private struct RemoteRun: Decodable, Identifiable { let id:String; let definitio
 private struct RemoteWorkspace: Decodable { let revision:Int; let focusRevision:Int; let focusId:String?; let runs:[RemoteRun] }
 private struct RemoteReservation:Decodable,Identifiable { let id:String; let definitionId:String; let definitionVersion:Int; let title:String; let startMillis:Double; let endMillis:Double; let occurrenceId:String }
 private struct RemoteSelection:Decodable { let state:String; let candidates:[RemoteReservation] }
-private struct RemoteContext:Decodable { let workspace:RemoteWorkspace; let reservation:RemoteSelection; let serverNow:Double }
+/// One "My routine" (whole day) item from the execution server's core DayOrbit ordering.
+private struct RemoteDayItem:Decodable,Identifiable { let kind:String; let id:String; let title:String; let atMillis:Double; let startMillis:Double?; let endMillis:Double?; let position:Int; let total:Int; let definitionId:String; let definitionVersion:Int; let occurrenceId:String }
+/// One node on the clock orbit from the server's shared-core OrbitClock: at = where it sits, start/end = its (expected) span.
+struct ClockSlot:Decodable { let id:String; let role:String; let atMillis:Double; let startMillis:Double?; let endMillis:Double? }
+private struct RemoteClock:Decodable { let day:[ClockSlot]; let runs:[String:[ClockSlot]] }
+private struct RemoteContext:Decodable { let workspace:RemoteWorkspace; let reservation:RemoteSelection; let day:[RemoteDayItem]?; let clock:RemoteClock?; let serverNow:Double }
 private struct RemoteResult:Decodable { let accepted:Bool;let reason:String }
 private struct RemoteReply:Decodable { let context:RemoteContext; let result:RemoteResult }
 
@@ -150,6 +155,10 @@ private struct RemoteReply:Decodable { let context:RemoteContext; let result:Rem
         guard let w=context?.workspace else{return}
         await request(["id":UUID().uuidString,"kind":"start","occurrenceId":UUID().uuidString,"expectedRevision":w.revision,"definition":["id":r.id,"version":r.version,"title":r.title,"author":r.author.name,"steps":[]]])
     }
+    func start(_ x:RemoteDayItem) async {
+        guard let w=context?.workspace,x.kind=="reservation" else{return}
+        await request(["id":UUID().uuidString,"kind":"start","occurrenceId":x.occurrenceId,"expectedRevision":w.revision,"definition":["id":x.definitionId,"version":x.definitionVersion,"title":x.title,"author":"","steps":[]]])
+    }
     func start(_ r:RemoteReservation) async {
         guard let w=context?.workspace else{return}
         await request(["id":UUID().uuidString,"kind":"start","occurrenceId":r.occurrenceId,"expectedRevision":w.revision,"definition":["id":r.definitionId,"version":r.definitionVersion,"title":r.title,"author":"","steps":[]]])
@@ -160,6 +169,24 @@ private struct RemoteTaskView:View {
  @State private var together=false
  @State private var inspected:RemoteRun?
  @State private var finding=false
+ @State private var dayReservation:RemoteDayItem?
+ private func ordered(_ r:RemoteRun)->[OrbitNode] {(r.order ?? r.steps.map{ $0.id }).compactMap{id in r.steps.first{$0.id==id}}.map{OrbitNode(id:$0.id,title:$0.title,status:$0.status)}}
+ /// Today's items in time order (server DayOrbit). An older server without "day": running runs + selected reservations.
+ private func dayItems(_ c:RemoteContext)->[RemoteDayItem] {
+  if let d=c.day {return d}
+  let runs=c.workspace.runs.filter{$0.status=="running"&&($0.definition.windowEndMillis ?? .infinity)>c.serverNow}.map{r in let o=r.order ?? r.steps.map{$0.id};return RemoteDayItem(kind:"run",id:r.id,title:r.definition.title,atMillis:r.definition.windowStartMillis ?? c.serverNow,startMillis:r.definition.windowStartMillis,endMillis:r.definition.windowEndMillis,position:(o.firstIndex{$0==r.currentUnitId} ?? -1)+1,total:o.count,definitionId:r.definition.id,definitionVersion:r.definition.version,occurrenceId:r.id)}
+  let res=c.reservation.candidates.map{x in RemoteDayItem(kind:"reservation",id:x.id,title:x.title,atMillis:x.startMillis,startMillis:x.startMillis,endMillis:x.endMillis,position:0,total:0,definitionId:x.definitionId,definitionVersion:x.definitionVersion,occurrenceId:x.occurrenceId)}
+  return (runs+res).sorted{($0.atMillis,$0.kind=="run" ? 0:1)<($1.atMillis,$1.kind=="run" ? 0:1)}
+ }
+ private func day(_ c:RemoteContext)->[OrbitDay] {dayItems(c).map{x in
+  let run=c.workspace.runs.first{$0.id==x.id && x.kind=="run"}
+  let meta=x.kind=="run" ? L("진행 중")+(x.total>0 ? " · \(x.position) / \(x.total)":x.startMillis != nil ? " · "+range(x.startMillis ?? 0,x.endMillis ?? 0):""):L("시작 전")+" · "+range(x.startMillis ?? 0,x.endMillis ?? 0)
+  return OrbitDay(id:x.id,kind:x.kind,title:x.title,startMillis:x.startMillis,endMillis:x.endMillis,meta:meta,steps:run.map(ordered) ?? [],progress:x.kind=="run" && x.total>0 ? "\(x.position) / \(x.total)":"")
+ }}
+ private func openDay(_ c:RemoteContext,_ d:OrbitDay){
+  if d.kind=="run" {if c.workspace.runs.contains(where:{$0.id==d.id && $0.id != c.workspace.focusId}) {together=true;inspected=c.workspace.runs.first{$0.id==d.id}}}
+  else {dayReservation=dayItems(c).first{$0.id==d.id && $0.kind=="reservation"}}
+ }
  private func range(_ a:Double,_ b:Double)->String {let f=DateFormatter();f.dateFormat="HH:mm";return f.string(from:Date(timeIntervalSince1970:a/1000))+"–"+f.string(from:Date(timeIntervalSince1970:b/1000))}
  private func times(_ d:RemoteDefinition)->String {guard let a=d.windowStartMillis,let b=d.windowEndMillis else{return ""};return range(a,b)}
  var body:some View {
@@ -168,7 +195,15 @@ private struct RemoteTaskView:View {
     let run=c.workspace.runs.first{$0.id==c.workspace.focusId}
     let active=run.map{$0.status=="running"&&($0.definition.windowEndMillis ?? .infinity)>c.serverNow} ?? false
     let others=c.workspace.runs.filter{$0.id != c.workspace.focusId&&$0.status=="running"&&($0.definition.windowEndMillis ?? .infinity)>c.serverNow}
-    if finding {FindRoutineView(busy:store.busy || store.error != nil,back:{finding=false},start:{r in Task{await store.startRoutine(r);if store.error==nil{finding=false}}})}
+    if let x=dayReservation {
+     let open=c.serverNow>=(x.startMillis ?? .infinity) && c.serverNow<(x.endMillis ?? 0)
+     APage(backLabel:L("돌아가기"),back:{dayReservation=nil},actionLabel:L("시작"),enabled:!store.busy && open,action:{Task{await store.start(x);if store.error==nil{dayReservation=nil}}}){
+      Text(x.title).font(.system(size:19,weight:.semibold))
+      ASource(text:L("시작 전")+" · "+range(x.startMillis ?? 0,x.endMillis ?? 0))
+      if !open {Text(L("예약된 시각에 시작할 수 있어요")).font(.system(size:12)).foregroundStyle(aSlate)}
+     }.id("day-reservation-\(x.id)")
+    }
+    else if finding {FindRoutineView(busy:store.busy || store.error != nil,back:{finding=false},start:{r in Task{await store.startRoutine(r);if store.error==nil{finding=false}}})}
     else if together {
      if let chosen=inspected,let r=others.first(where:{$0.id==chosen.id}) {
       APage(backLabel:L("돌아가기"),back:{inspected=nil},actionLabel:L("집중하기"),enabled:!store.busy,action:{Task{await store.focus(r);if store.error==nil{together=false;inspected=nil}}}){
@@ -181,16 +216,16 @@ private struct RemoteTaskView:View {
      }}
     }
     else if active,let r=run {
-      let ordered=(r.order ?? r.steps.map{ $0.id }).compactMap{id in r.steps.first{$0.id==id}}.map{OrbitNode(id:$0.id,title:$0.title,status:$0.status)}
-      OrbitFace(parent:r.definition.title,nodes:ordered,currentId:r.currentUnitId,token:"\(r.id):\(r.revision):\(c.workspace.focusRevision)",busy:store.busy || store.error != nil,times:times(r.definition),startMillis:r.definition.windowStartMillis,endMillis:r.definition.windowEndMillis,otherCount:others.count,author:r.definition.author,description:r.definition.description ?? "",onOthers:{together=true},onFind:{finding=true},action:{kind in Task{await store.act(kind,r)}})
+      // A plain schedule (no steps) has no step level: it stays on the day orbit and Done completes it.
+      OrbitFace(parent:r.definition.title,nodes:ordered(r),currentId:r.currentUnitId,token:"\(r.id):\(r.revision):\(c.workspace.focusRevision)",busy:store.busy || store.error != nil,times:times(r.definition),startMillis:r.definition.windowStartMillis,endMillis:r.definition.windowEndMillis,clockOffset:c.serverNow-Date().timeIntervalSince1970*1000,optionsEnabled:!r.steps.isEmpty,otherCount:others.count,author:r.definition.author,description:r.definition.description ?? "",onOthers:{together=true},onFind:{finding=true},day:day(c),dayAnchor:r.id,dayOnly:r.steps.isEmpty,onDayOpen:{openDay(c,$0)},slots:c.clock?.runs[r.id] ?? [],daySlots:c.clock?.day ?? [],action:{kind in Task{await store.act(r.steps.isEmpty && kind=="complete" ? "completeParent":kind,r)}})
     }else if c.reservation.state=="conflict" {
       ReservationChoices(items:c.reservation.candidates,now:c.serverNow,busy:store.busy || store.error != nil,find:{finding=true},otherCount:others.count,others:{together=true},start:{r in Task{await store.start(r)}})
     }else if c.reservation.state=="selected",let r=c.reservation.candidates.first {
-      if c.serverNow>=r.startMillis {OrbitFace(parent:r.title,nodes:[],currentId:nil,token:r.id,busy:store.busy || store.error != nil,times:range(r.startMillis,r.endMillis),startMillis:r.startMillis,endMillis:r.endMillis,primary:L("시작"),optionsEnabled:false,otherCount:others.count,onOthers:{together=true},onFind:{finding=true},action:{_ in Task{await store.start(r)}})}else{ScrollView{VStack(spacing:10){Text(r.title).multilineTextAlignment(.center);Text(range(r.startMillis,r.endMillis)).font(.caption);Text(L("예약 예정"));Button(L("찾기")){finding=true};if !others.isEmpty{Button(L("함께 진행 {count}",["count":String(others.count)])){together=true}};Button(L("새로고침")){Task{await store.request()}}}.padding(.horizontal,20).padding(.vertical,12)}.supportViewport()}
+      OrbitFace(parent:r.title,nodes:[],currentId:nil,token:r.id,busy:store.busy || store.error != nil,times:range(r.startMillis,r.endMillis),startMillis:r.startMillis,endMillis:r.endMillis,clockOffset:c.serverNow-Date().timeIntervalSince1970*1000,primary:c.serverNow>=r.startMillis ? L("시작"):L("예약 예정"),optionsEnabled:false,otherCount:others.count,onOthers:{together=true},onFind:{finding=true},day:day(c),dayAnchor:r.id,dayOnly:true,onDayOpen:{openDay(c,$0)},daySlots:c.clock?.day ?? [],action:{_ in if c.serverNow>=r.startMillis {Task{await store.start(r)}}})
     }else{ScrollView{VStack(spacing:10){Text(c.reservation.state=="none" ? L("다음 작업 없음"):L("일정을 확인할 수 없어요"));Button(L("찾기")){finding=true};if !others.isEmpty{Button(L("함께 진행 {count}",["count":String(others.count)])){together=true}};Button(L("새로고침")){Task{await store.request()}}}.padding(.horizontal,20).padding(.vertical,12)}.supportViewport()}
    }.allowsHitTesting(store.error==nil).accessibilityHidden(store.error != nil)}else{ProgressView()}
    if let error=store.error {VStack(spacing:12){Text(error);Button(L("결과 확인")){Task{await store.request()}}.disabled(store.busy)}.frame(maxWidth:.infinity,maxHeight:.infinity).background(Color.white.opacity(0.97))}
-  }.frame(maxWidth:.infinity,maxHeight:.infinity).background(Color.white).foregroundStyle(Color(red:20/255,green:36/255,blue:61/255)).preferredColorScheme(.light).overlay{SystemClockBackdrop()}.task{await store.request();while !Task.isCancelled{try? await Task.sleep(nanoseconds:2_000_000_000);if !Task.isCancelled && store.canRefresh{await store.refresh()}}}
+  }.frame(maxWidth:.infinity,maxHeight:.infinity).background(Color.white).foregroundStyle(Color(red:20/255,green:36/255,blue:61/255)).preferredColorScheme(.light).task{await store.request();while !Task.isCancelled{try? await Task.sleep(nanoseconds:2_000_000_000);if !Task.isCancelled && store.canRefresh{await store.refresh()}}}
  }
 }
 
@@ -199,13 +234,6 @@ private let aInk=Color(red:20/255,green:36/255,blue:61/255)
 private let aNavy=Color(red:23/255,green:54/255,blue:94/255)
 private let aSubtle=Color(red:242/255,green:245/255,blue:249/255)
 private let aSlate=Color(red:79/255,green:97/255,blue:122/255)
-/// Align the backing surface to watchOS's trailing clock glyphs, not the content header.
-private struct SystemClockBackdrop:View {
- var body:some View{GeometryReader{g in
-  RoundedRectangle(cornerRadius:6).fill(aNavy).frame(width:56,height:22)
-   .position(x:g.size.width-33,y:23)
- }.ignoresSafeArea().allowsHitTesting(false).accessibilityHidden(true)}
-}
 private struct AAction:View {
  let label:String;var enabled=true;let action:()->Void
  var body:some View{Button(action:action){Text(label).font(.system(size:15,weight:.semibold)).foregroundStyle(.white).frame(maxWidth:.infinity).frame(height:44).background(aNavy,in:Capsule())}.buttonStyle(.plain).disabled(!enabled).accessibilityLabel(label)}
@@ -297,16 +325,31 @@ private struct RoutineDeck:View {
  }.ignoresSafeArea().preferredColorScheme(.light)}
 }
 
+private struct TitleHeightKey:PreferenceKey {static var defaultValue=0.0;static func reduce(value:inout Double,nextValue:()->Double){value=max(value,nextValue())}}
 private struct OrbitNode:Identifiable {let id:String;let title:String;let status:String}
+/// A "My routine" item: a running routine (steps = its mini ring) or a reservation.
+private struct OrbitDay:Identifiable {let id:String;let kind:String;let title:String;let startMillis:Double?;let endMillis:Double?;let meta:String;let steps:[OrbitNode]
+ /// Watch-size step progress ("2 / 3"), placed like the step level's counter; the full meta is the accessibility label.
+ var progress:String=""}
 private struct OrbitFace:View {
     let parent:String;let nodes:[OrbitNode];let currentId:String?;let token:String;let busy:Bool
-    var times:String="";var startMillis:Double?=nil;var endMillis:Double?=nil;var primary:String=L("완료");var optionsEnabled=true;var otherCount=0
+    var times:String="";var startMillis:Double?=nil;var endMillis:Double?=nil
+    /// App-server time minus this device's clock (ms), so window progress follows the server, not the watch.
+    var clockOffset:Double=0;var primary:String=L("완료");var optionsEnabled=true;var otherCount=0
     var author:String="";var description:String=""
-    var onOthers:()->Void={};var onFind:(()->Void)?=nil;let action:(String)->Void
-    @State private var browsing:Int?;@State private var root=false;@State private var detail=false;@State private var detailStep:Int?
+    var onOthers:()->Void={};var onFind:(()->Void)?=nil
+    /// Day level ("My routine"): today's items; the anchor is the real focus (run) or the selected reservation.
+    /// Browsing it is preview only. dayOnly = there is no step level (a reservation not started yet).
+    var day:[OrbitDay]=[];var dayAnchor:String?=nil;var dayOnly=false;var onDayOpen:(OrbitDay)->Void={_ in}
+    /// Clock orbit (user 11-04): this run's steps and the day's items placed at their times by the shared core (OrbitClock).
+    /// Empty (local demo / older server): the step level keeps its fixed neighbour slots.
+    var slots:[ClockSlot]=[];var daySlots:[ClockSlot]=[]
+    let action:(String)->Void
+    @State private var dayBrowse:Int?
+    @State private var browsing:Int?;@State private var root=OrbitFace.verificationDay;@State private var detail=false;@State private var detailStep:Int?
     @State private var overlay=false;@State private var selection = -1
     @State private var turn=0.0;@State private var orbitStep=9.0;@State private var lastParent="";@State private var clock=Date()
-    @State private var crown=0.0;@State private var lastCrown=0.0
+    @State private var crown=0.0;@State private var lastCrown=0.0;@State private var titleHeight=0.0
     @State private var contact:String?;@State private var began:CGPoint = .zero;@State private var moved=false
     @State private var hold=WatchHold();@State private var timer:Task<Void,Never>?
     @State private var held=false;@State private var wasOverlay=false
@@ -319,14 +362,92 @@ private struct OrbitFace:View {
     private let geometry=WatchGeometry()
     private var actual:Int {nodes.firstIndex{$0.id==currentId} ?? 0}
     private var shown:Int {min(max(0,browsing ?? actual),max(0,nodes.count-1))}
-    private var title:String {root || nodes.isEmpty ? parent:nodes[shown].title}
-    private func home(){cancel();browsing=nil;root=false;detail=false}
+    private var dayMode:Bool {(root || dayOnly) && !day.isEmpty}
+    private var dayActual:Int {day.firstIndex{$0.id==dayAnchor} ?? 0}
+    private var dayShown:Int {min(max(0,dayBrowse ?? dayActual),max(0,day.count-1))}
+    private var dayBrowsing:Bool {dayMode && dayShown != dayActual}
+    private var shownDay:OrbitDay? {dayMode ? day[dayShown]:nil}
+    private var winStart:Double? {dayMode ? shownDay?.startMillis:startMillis}
+    private var winEnd:Double? {dayMode ? shownDay?.endMillis:endMillis}
+    /// Step mini ring. On the watch the day neighbours sit one slot (~24pt) from the planet, so the ring is drawn only
+    /// when no neighbour is (time window shown or a single item); "2 / 3" carries the step progress instead.
+    private var ring:[OrbitNode] {dayMode ? (windowShown || day.count<2 ? (shownDay?.steps ?? []):[]):root ? nodes:[]}
+    private var returning:Bool {browsing != nil || dayBrowsing || (root && !optionsEnabled)}
+    private var title:String {if let d=shownDay{return d.title};return root || nodes.isEmpty ? parent:nodes[shown].title}
+    private var windowShown:Bool {(dayMode || root || (primary==L("시작")||primary==L("예약 예정"))) && (winStart ?? 0)<(winEnd ?? 0)}
+    /// Time scale by depth from the shared core (OrbitScales): My routine = 2 h window, 10-min ticks; a routine's steps = 30 min, 5-min ticks.
+    /// Now (the node) sits at 0°, now − window/2 at the top end, now + window/2 at the bottom end; ticks are on real clock times.
+    private var scale:OrbitScale {dayMode ? OrbitScales.shared.DAY : OrbitScales.shared.ROUTINE}
+    private var windowMillis:Double {Double(scale.halfWindowMillis)}
+    private var clockTicks:[OrbitTick] {OrbitScales.shared.ticks(scale:scale,nowMillis:Int64(nowMillis),zoneOffsetMillis:Int64(TimeZone.current.secondsFromGMT(for:clock)*1000))}
+    private var nowMillis:Double {clock.timeIntervalSince1970*1000+clockOffset}
+    /// Watch layout (user 11-04, clock2): a one-line title tight under the top bar (search / +N) and a short capsule near
+    /// the bottom edge, so the clock orbit between them gets about twice the height.
+    private static func titleY(_ h:Double)->Double {h<215 ? 43:45}
+    private static let titleBox=20.0,ctaHeight=36.0
+    private static func footerY(_ h:Double)->Double {h-(h<215 ? 26:29)}
+    /// Half the window in degrees, sized so both ends (and their labels) stay clear of the title and the button.
+    private func halfSpan(w:Double,h:Double,footer:Double)->Double {
+        // The title is vertically centred in its frame; use its measured height (fallback: the full frame).
+        let top=OrbitFace.titleY(h)+min(titleHeight>0 ? titleHeight:99,OrbitFace.titleBox)/2+6,bottom=footer-OrbitFace.ctaHeight/2-6
+        return asin(min(1,max(0,min(h/2-top,bottom-h/2))/(w/2)))*180/Double.pi
+    }
+    private func windowAngle(_ t:Double,_ half:Double)->Double {(t-nowMillis)/windowMillis*half}
+    private func orbitPoint(_ deg:Double,_ w:Double,_ h:Double,_ radius:Double?=nil)->CGPoint {let a=deg*Double.pi/180,r=radius ?? w/2;return CGPoint(x:r*cos(a),y:h/2+r*sin(a))}
+    /// Window-end times (slate, left of the orbit) and reservation start/end (navy, right of the orbit, clear of the node and "+1").
+    private func windowLabels(w:Double,h:Double,footer:Double)->(ends:[(String,CGPoint)],marks:[(String,CGPoint)]) {
+        guard windowShown,let a=winStart,let b=winEnd else{return ([],[])}
+        let f=DateFormatter();f.dateFormat="HH:mm";let half=halfSpan(w:w,h:h,footer:footer),r=w/2,lh=9.0
+        let text={(t:Double) in f.string(from:Date(timeIntervalSince1970:t/1000))}
+        // hour / quarter-hour labels on the sliding clock ticks (kept clear of the node), instead of fixed end times
+        let ends=clockTicks.filter{$0.label}.map{k in (text(Double(k.atMillis)),orbitPoint(k.offset*half,w,h))}.filter{abs($0.1.y-h/2)>12+lh}
+        var marks:[(String,CGPoint)]=[]
+        for (t,upward) in [(a,a<=nowMillis),(b,b<nowMillis)] where abs(windowAngle(t,half))<=half {
+            var y=orbitPoint(windowAngle(t,half),w,h).y
+            if abs(y-h/2)<15+lh {y=h/2+(upward ? -1:1)*(15+lh)} // clear of the app-time label right of the planet
+            let near=max(0,abs(y-h/2)-lh)
+            marks.append((text(t),CGPoint(x:sqrt(max(0,r*r-near*near))+10,y:y)))
+        }
+        if marks.count==2 && abs(marks[0].1.y-marks[1].1.y)<2*lh {marks.removeLast()}
+        return (ends,marks)
+    }
+    /// Nodes on the clock (not the current one, which is the planet = now), and the current item's timer span.
+    private var clockNodes:[(at:Double,fill:Color,done:Bool,selected:Bool)] {
+        if dayMode {return daySlots.filter{$0.role != "current"}.map{s in let i=day.firstIndex{$0.id==s.id};return (s.atMillis,day.first{$0.id==s.id}?.kind=="run" ? pale:Color.white,false,i != nil && i==dayShown && dayBrowsing)}}
+        if root {return []}
+        return slots.filter{$0.role != "current"}.map{s in let i=nodes.firstIndex{$0.id==s.id};return (s.atMillis,s.role=="done" ? navy:pale,s.role=="done",i != nil && browsing != nil && i==shown)}
+    }
+    /// Display only: nodes within the planet are nudged just above (past) / below (future) it, one node apart, keeping their order.
+    private func spreadAngles(_ a:[Double],clear:Double,gap:Double)->[Double] {
+        var out=a
+        for sign in [1.0,-1.0] {
+            var last:Double?=nil
+            for i in a.indices.filter({a[$0]*sign>=0 && (sign>0 || a[$0] != 0)}).sorted(by:{abs(a[$0])<abs(a[$1])}) {
+                var v=max(abs(a[i]),clear);if let l=last {v=max(v,l+gap)};last=v;out[i]=sign*v
+            }
+        }
+        return out
+    }
+    /// Simulator verification only (-verification-port 8793 -verification-day): open on the day level ("My routine") for screenshots.
+    private static var verificationDay:Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        return DeviceConnection.localPort==8793 && ProcessInfo.processInfo.arguments.contains("-verification-day")
+        #else
+        return false
+        #endif
+    }
+    private var timerSlot:ClockSlot? {dayMode ? daySlots.first{$0.role=="current"}:root ? nil:slots.first{$0.role=="current"}}
+    private var nowText:String {let f=DateFormatter();f.dateFormat="HH:mm";return f.string(from:Date(timeIntervalSince1970:nowMillis/1000))}
+    private func home(){cancel();browsing=nil;root=false;detail=false;dayBrowse=nil}
+    /// Day level → down: the anchor run goes to its steps; other items open their detail (Focus here / Start).
+    private func openDay(){guard let d=shownDay else{return};if d.id==dayAnchor && !dayOnly && !nodes.isEmpty{root=false;dayBrowse=nil}else{onDayOpen(d)}}
+    private func back(){if dayBrowsing{dayBrowse=nil}else{home()}}
     private func cancel(){timer?.cancel();timer=nil;contact=nil;hold.cancel();held=false;overlay=false;selection = -1}
-    private func peer(_ delta:Int){guard !root,!nodes.isEmpty else{return};let n=min(max(0,shown+delta),nodes.count-1);browsing=n==actual ? nil:n}
+    private func peer(_ delta:Int){if dayMode{let n=min(max(0,dayShown+delta),day.count-1);dayBrowse=n==dayActual ? nil:n;return};guard !root,!nodes.isEmpty else{return};let n=min(max(0,shown+delta),nodes.count-1);browsing=n==actual ? nil:n}
     private func run(_ index:Int){guard !busy else{return};overlay=false;selection = -1;if index==0{action(root ? "completeParent":"complete")}else if !root{action(index==1 ? "defer":"skip")}}
     var body:some View {
         GeometryReader { proxy in
-            let w=proxy.size.width,h=proxy.size.height,footer=h*0.78,bw=w-64,ctaX=w/2
+            let w=proxy.size.width,h=proxy.size.height,footer=OrbitFace.footerY(h),bw=w-72,ctaX=w/2
             ZStack {
                 Color.white
                 if detail {
@@ -354,53 +475,101 @@ private struct OrbitFace:View {
                                 ctx.stroke(Path(ellipseIn:CGRect(x:-22,y:h/2-22,width:44,height:44)),with:.color(pale),lineWidth:1)
                                 var path=Path();path.addArc(center:CGPoint(x:0,y:h/2),radius:w/2,startAngle:.degrees(-2*geometry.peerAngle(width:w)-2),endAngle:.degrees(2*geometry.peerAngle(width:w)+2),clockwise:false)
                                 ctx.stroke(path,with:.color(Color(red:113/255,green:133/255,blue:158/255)),lineWidth:1.5)
-                                for delta in [-2,-1,1,2] where nodes.indices.contains(shown+delta) && geometry.peerVisible(width:w,height:h,offset:Int32(delta),subtitle:browsing != nil) {
+                                for delta in [-2,-1,1,2] where slots.isEmpty && nodes.indices.contains(shown+delta) && geometry.peerVisible(width:w,height:h,offset:Int32(delta),subtitle:browsing != nil) {
                                     let p=CGPoint(x:geometry.x(width:w,angleDegrees:Double(delta)*geometry.peerAngle(width:w)),y:geometry.y(width:w,height:h,angleDegrees:Double(delta)*geometry.peerAngle(width:w)))
                                     let done=nodes[shown+delta].status=="completed"
                                     ctx.fill(Path(ellipseIn:CGRect(x:p.x-7,y:p.y-7,width:14,height:14)),with:.color(done ? navy:pale))
                                     ctx.stroke(Path(ellipseIn:CGRect(x:p.x-7,y:p.y-7,width:14,height:14)),with:.color(slate),lineWidth:1)
                                     if done {var check=Path();check.move(to:CGPoint(x:p.x-3,y:p.y));check.addLine(to:CGPoint(x:p.x-1,y:p.y+2));check.addLine(to:CGPoint(x:p.x+3,y:p.y-3));ctx.stroke(check,with:.color(.white),lineWidth:1)}
                                 }
+                            } else if dayMode {
+                                // Same parent sphere and orbit as the step level; the sphere is "My routine".
+                                ctx.fill(Path(ellipseIn:CGRect(x:-22,y:h/2-22,width:44,height:44)),with:.color(aSubtle))
+                                ctx.stroke(Path(ellipseIn:CGRect(x:-22,y:h/2-22,width:44,height:44)),with:.color(pale),lineWidth:1)
+                                if !windowShown && daySlots.isEmpty {
+                                    var path=Path();path.addArc(center:CGPoint(x:0,y:h/2),radius:w/2,startAngle:.degrees(-2*geometry.peerAngle(width:w)-2),endAngle:.degrees(2*geometry.peerAngle(width:w)+2),clockwise:false)
+                                    ctx.stroke(path,with:.color(Color(red:113/255,green:133/255,blue:158/255)),lineWidth:1.5)
+                                    // Neighbour day items (runs filled, reservations hollow). Hidden under a time window so they never read as times.
+                                    for delta in [-2,-1,1,2] where day.indices.contains(dayShown+delta) && geometry.peerVisible(width:w,height:h,offset:Int32(delta),subtitle:false) {
+                                        let p=CGPoint(x:geometry.x(width:w,angleDegrees:Double(delta)*geometry.peerAngle(width:w)),y:geometry.y(width:w,height:h,angleDegrees:Double(delta)*geometry.peerAngle(width:w)))
+                                        ctx.fill(Path(ellipseIn:CGRect(x:p.x-7,y:p.y-7,width:14,height:14)),with:.color(day[dayShown+delta].kind=="run" ? pale:.white))
+                                        ctx.stroke(Path(ellipseIn:CGRect(x:p.x-7,y:p.y-7,width:14,height:14)),with:.color(slate),lineWidth:1)
+                                    }
+                                }
                             }
-                        }.rotationEffect(.degrees(root ? 0:turn),anchor:UnitPoint(x:0,y:0.5)).mask { Rectangle().frame(height:max(0,footer-24-(h<215 ? 65:81))).position(x:w/2,y:(footer-24+(h<215 ? 65:81))/2) }.accessibilityHidden(true)
+                        }.rotationEffect(.degrees(root ? 0:turn),anchor:UnitPoint(x:0,y:0.5)).mask { Rectangle().frame(height:max(0,footer-OrbitFace.ctaHeight/2-4-(OrbitFace.titleY(h)+OrbitFace.titleBox/2+2))).position(x:w/2,y:(footer-OrbitFace.ctaHeight/2-4+OrbitFace.titleY(h)+OrbitFace.titleBox/2+2)/2) }.accessibilityHidden(true)
                         Canvas {ctx,size in
                             let c=CGPoint(x:w/2,y:h/2)
-                            if (root || primary==L("시작")),let a=startMillis,let b=endMillis,b>a {
-                                let p=min(1,max(0,(clock.timeIntervalSince1970*1000-a)/(b-a)))
-                                let start=geometry.arcStart(progress:p),end=geometry.arcEnd(progress:p)
-                                for (from,to,color) in [(start,0.0,pale),(0.0,end,slate)] where to>from {var arc=Path();arc.addArc(center:CGPoint(x:0,y:h/2),radius:w/2,startAngle:.degrees(from),endAngle:.degrees(to),clockwise:false);ctx.stroke(arc,with:.color(color),lineWidth:6)}
-                                for angle in [start,end]{let a=angle*Double.pi/180;var tick=Path();tick.move(to:CGPoint(x:(w/2-4)*cos(a),y:h/2+(w/2-4)*sin(a)));tick.addLine(to:CGPoint(x:(w/2+4)*cos(a),y:h/2+(w/2+4)*sin(a)));ctx.stroke(tick,with:.color(ink),lineWidth:1)}
+                            if windowShown,let a=winStart,let b=winEnd {
+                                let half=halfSpan(w:w,h:h,footer:footer),sa=max(-half,windowAngle(a,half)),ea=min(half,windowAngle(b,half))
+                                func orbit(_ from:Double,_ to:Double,_ color:Color,_ width:Double){guard to>from else{return};var arc=Path();arc.addArc(center:CGPoint(x:0,y:h/2),radius:w/2,startAngle:.degrees(from),endAngle:.degrees(to),clockwise:false);ctx.stroke(arc,with:.color(color),lineWidth:width)}
+                                orbit(-half,half,pale,1.5)
+                                orbit(sa,min(0,ea),slate,6);orbit(max(0,sa),ea,Color(red:163/255,green:179/255,blue:201/255),6)
+                                func tick(_ deg:Double,_ len:Double,_ color:Color){var t=Path();t.move(to:orbitPoint(deg,w,h,w/2-len));t.addLine(to:orbitPoint(deg,w,h,w/2+len));ctx.stroke(t,with:.color(color),lineWidth:1.5)}
+                                for k in clockTicks {tick(k.offset*half,k.label ? 4:2.5,slate)}
+                                for t in [a,b] where abs(windowAngle(t,half))<=half {tick(windowAngle(t,half),6,ink)}
                             }
-                            if !nodes.isEmpty || root || primary==L("시작") {
+                            // Clock ticks are always on the orbit (user 11-04), even with no time window: the orbit is a clock at every depth.
+                            if !windowShown && (!nodes.isEmpty || root || dayMode) {
+                                let half=halfSpan(w:w,h:h,footer:footer)
+                                for k in clockTicks {let len=k.label ? 4.0:2.5;var t=Path();t.move(to:orbitPoint(k.offset*half,w,h,w/2-len));t.addLine(to:orbitPoint(k.offset*half,w,h,w/2+len));ctx.stroke(t,with:.color(slate),lineWidth:1.5)}
+                            }
+                            // Clock orbit: the current item's timer (thin dark elapsed, thick remaining) and every other node at its time.
+                            if !slots.isEmpty || !daySlots.isEmpty {
+                                let half=halfSpan(w:w,h:h,footer:footer)
+                                func arc(_ from:Double,_ to:Double,_ color:Color,_ width:Double){guard to>from else{return};var p=Path();p.addArc(center:CGPoint(x:0,y:h/2),radius:w/2,startAngle:.degrees(from),endAngle:.degrees(to),clockwise:false);ctx.stroke(p,with:.color(color),lineWidth:width)}
+                                if !windowShown {arc(-half,half,pale,1.5)}
+                                if let t=timerSlot,let a=t.startMillis,let b=t.endMillis,b>nowMillis {
+                                    // The remaining part starts at the planet's edge (not its centre) so a few-minute remainder is not hidden under it.
+                                    let edge=13.0/(w/2)*180/Double.pi
+                                    arc(max(-half,windowAngle(a,half)),0,ink,2);arc(edge,min(half+edge,edge+windowAngle(b,half)),Color(red:243/255,green:138/255,blue:32/255).opacity(0.7),6)
+                                }
+                                let shownNodes=clockNodes.filter{abs(windowAngle($0.at,half))<=half}
+                                let angles=spreadAngles(shownNodes.map{windowAngle($0.at,half)},clear:(ring.isEmpty ? 21.0:38.0)/(w/2)*180/Double.pi,gap:15.0/(w/2)*180/Double.pi)
+                                for (n,deg) in zip(shownNodes,angles) {
+                                    let p=orbitPoint(deg,w,h),r=n.selected ? 8.0:6.5
+                                    ctx.fill(Path(ellipseIn:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r)),with:.color(n.fill))
+                                    ctx.stroke(Path(ellipseIn:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r)),with:.color(n.selected ? Color(red:243/255,green:138/255,blue:32/255):slate),lineWidth:n.selected ? 2:1)
+                                    if n.done {var check=Path();check.move(to:CGPoint(x:p.x-3,y:p.y));check.addLine(to:CGPoint(x:p.x-1,y:p.y+2));check.addLine(to:CGPoint(x:p.x+3,y:p.y-3));ctx.stroke(check,with:.color(.white),lineWidth:1)}
+                                }
+                            }
+                            if !nodes.isEmpty || root || dayMode || (primary==L("시작")||primary==L("예약 예정")) {
                                 ctx.fill(Path(ellipseIn:CGRect(x:c.x-12,y:c.y-12,width:24,height:24)),with:.color(.white))
                                 ctx.fill(Path(ellipseIn:CGRect(x:c.x-9,y:c.y-9,width:18,height:18)),with:.color(Color(red:243/255,green:138/255,blue:32/255)))
                                 ctx.stroke(Path(ellipseIn:CGRect(x:c.x-12,y:c.y-12,width:24,height:24)),with:.color(Color(red:140/255,green:77/255,blue:0)),lineWidth:1)
                             }
-                            if root && !nodes.isEmpty {
-                                ctx.stroke(Path(ellipseIn:CGRect(x:c.x-32,y:c.y-32,width:64,height:64)),with:.color(pale),lineWidth:1)
-                                for (i,n) in nodes.prefix(3).enumerated(){let a=Double(-160+i*160)*Double.pi/180;let p=CGPoint(x:c.x+32*cos(a),y:c.y+32*sin(a));ctx.fill(Path(ellipseIn:CGRect(x:p.x-3,y:p.y-3,width:6,height:6)),with:.color(n.status=="completed" ? navy:pale))}
+                            if !ring.isEmpty {
+                                let rr=32.0
+                                ctx.stroke(Path(ellipseIn:CGRect(x:c.x-rr,y:c.y-rr,width:2*rr,height:2*rr)),with:.color(pale),lineWidth:1)
+                                for (i,n) in ring.prefix(3).enumerated(){let a=Double(-160+i*160)*Double.pi/180;let p=CGPoint(x:c.x+rr*cos(a),y:c.y+rr*sin(a));ctx.fill(Path(ellipseIn:CGRect(x:p.x-3,y:p.y-3,width:6,height:6)),with:.color(n.status=="completed" ? navy:pale))}
                             }
                         }.accessibilityHidden(true)
-                        Text(title).font(.system(size:17,weight:.semibold)).lineLimit(h<215 ? 1:2).multilineTextAlignment(.leading).foregroundStyle(ink).frame(width:w-40,height:h<215 ? 24:42,alignment:.leading).contentShape(Rectangle()).onTapGesture{detailStep=root || nodes.isEmpty ? nil:shown;detail=true}.accessibilityLabel(L("상세: ")+title).accessibilityAddTraits(.isButton).position(x:w/2,y:h<215 ? 52:59)
-                        Text(browsing != nil ? L("탐색 중") : (root || primary==L("시작")) ? times : "\(shown+1) / \(nodes.count)").font(.system(size:11)).monospacedDigit().foregroundStyle(slate).position(x:root || primary==L("시작") ? w/2:38,y:h*0.78-34)
-                        if !root && !nodes.isEmpty {Text(parent).font(.system(size:11)).foregroundStyle(slate).lineLimit(2).frame(width:w/2-34,height:24,alignment:.leading).contentShape(Rectangle()).onTapGesture{root=true}.position(x:12+(w/2-34)/2,y:h/2).accessibilityAddTraits(.isButton).accessibilityLabel(L("상위: ")+parent)}
-                        if otherCount>0 {Button("+\(otherCount)",action:onOthers).buttonStyle(.plain).foregroundStyle(navy).frame(width:44,height:44).position(x:w-22,y:h/2).accessibilityLabel(L("함께 진행 {count}",["count":String(otherCount)]))}
+                        Text(title).font(.system(size:15,weight:.semibold)).lineLimit(1).truncationMode(.tail).multilineTextAlignment(.leading).foregroundStyle(ink).background(GeometryReader{g in Color.clear.preference(key:TitleHeightKey.self,value:g.size.height)}).frame(width:w-40,height:OrbitFace.titleBox,alignment:.leading).contentShape(Rectangle()).onTapGesture{if dayMode{openDay()}else{detailStep=root || nodes.isEmpty ? nil:shown;detail=true}}.accessibilityLabel(L("상세: ")+title).accessibilityAddTraits(.isButton).position(x:w/2,y:OrbitFace.titleY(h)).onPreferenceChange(TitleHeightKey.self){titleHeight=$0}
+                        if let d=shownDay {if !windowShown && !d.progress.isEmpty {Text(d.progress).font(.system(size:11)).monospacedDigit().foregroundStyle(slate).position(x:38,y:h/2+26).accessibilityLabel(d.meta)}}
+                        else if browsing != nil || !(root || (primary==L("시작")||primary==L("예약 예정"))) {Text(browsing != nil ? L("탐색 중") : "\(shown+1) / \(nodes.count)").font(.system(size:11)).monospacedDigit().foregroundStyle(slate).position(x:38,y:h/2+26)}
+                        else if !windowShown && !times.isEmpty {Text(times).font(.system(size:11)).monospacedDigit().foregroundStyle(slate).position(x:w/2,y:footer-OrbitFace.ctaHeight/2-10)}
+                        let labels=windowLabels(w:w,h:h,footer:footer)
+                        ForEach(Array(labels.ends.enumerated()),id:\.offset){_,label in Text(label.0).font(.system(size:11)).monospacedDigit().foregroundStyle(slate).fixedSize().frame(width:max(0,label.1.x-8),alignment:.trailing).position(x:max(0,label.1.x-8)/2,y:label.1.y)}
+                        ForEach(Array(labels.marks.enumerated()),id:\.offset){_,label in Text(label.0).font(.system(size:h<215 ? 13:14,weight:.semibold)).monospacedDigit().foregroundStyle(navy).fixedSize().frame(width:max(0,w-label.1.x-4),alignment:.leading).position(x:label.1.x+max(0,w-label.1.x-4)/2,y:label.1.y)}
+                        if dayMode {Text(L("나의 루틴")).font(.system(size:11)).foregroundStyle(slate).lineLimit(2).frame(width:w/2-34,height:24,alignment:.leading).contentShape(Rectangle()).onTapGesture{dayBrowse=nil}.position(x:12+(w/2-34)/2,y:h/2).accessibilityAddTraits(.isButton).accessibilityLabel(L("나의 루틴"))}
+                        else if !root && !nodes.isEmpty {Text(parent).font(.system(size:11)).foregroundStyle(slate).lineLimit(2).frame(width:w/2-34,height:24,alignment:.leading).contentShape(Rectangle()).onTapGesture{root=true;dayBrowse=nil}.position(x:12+(w/2-34)/2,y:h/2).accessibilityAddTraits(.isButton).accessibilityLabel(L("상위: ")+parent)}
+                        // The app's time (server clock) right of the planet = now. "+N" lives in the top bar next to search.
+                        if !nodes.isEmpty || root || dayMode || (primary==L("시작")||primary==L("예약 예정")) {Text(nowText).font(.system(size:h<215 ? 13:14,weight:.bold)).monospacedDigit().foregroundStyle(ink).fixedSize().position(x:w/2+(ring.isEmpty ? 16:38)+20,y:h/2).accessibilityLabel(nowText)}
+                        if otherCount>0 {Button("+\(otherCount)",action:onOthers).buttonStyle(.plain).font(.system(size:15,weight:.semibold)).foregroundStyle(navy).frame(width:40,height:40).position(x:onFind != nil ? 66:24,y:22).accessibilityLabel(L("함께 진행 {count}",["count":String(otherCount)]))}
                         if let onFind=onFind {Button(action:onFind){Image(systemName:"magnifyingglass").frame(width:44,height:44)}.buttonStyle(.plain).foregroundStyle(navy).position(x:24,y:22).disabled(busy).accessibilityLabel(L("찾기"))}
-                        Text(busy ? L("저장 중"):browsing != nil || (root && !optionsEnabled) ? L("현재"):primary==L("완료") ? L("✓ 완료"):primary).font(.system(size:16,weight:.semibold)).foregroundStyle(.white).frame(width:bw,height:44).background(busy ? pale:navy,in:Capsule()).position(x:ctaX,y:footer).accessibilityAction(named:Text(L("작업 옵션"))){if optionsEnabled && !busy{overlay=true}}.accessibilityLabel(browsing != nil || (root && !optionsEnabled) ? L("현재"):primary).accessibilityAddTraits(.isButton).accessibilityAction{if !busy{if browsing != nil || (root && !optionsEnabled){home()}else{action(root ? "completeParent":primary==L("시작") ? "start":"complete")}}}
+                        Text(busy ? L("저장 중"):returning ? L("현재"):primary==L("완료") ? L("✓ 완료"):primary).font(.system(size:15,weight:.semibold)).foregroundStyle(.white).frame(width:bw,height:OrbitFace.ctaHeight).background(busy ? pale:navy,in:Capsule()).position(x:ctaX,y:footer).accessibilityAction(named:Text(L("작업 옵션"))){if optionsEnabled && !busy{overlay=true}}.accessibilityLabel(returning ? L("현재"):primary).accessibilityAddTraits(.isButton).accessibilityAction{if !busy{if returning{back()}else{action(root ? "completeParent":(primary==L("시작")||primary==L("예약 예정")) ? "start":"complete")}}}
                     }.blur(radius:overlay ? 6:0).accessibilityHidden(overlay)
                     if overlay {
                         Text(selection>=0 ? [L("완료"),L("미루기"),L("건너뛰기")][selection]:"").font(.system(size:16,weight:.semibold)).foregroundStyle(ink).position(x:w/2,y:h*0.22).accessibilityAction(named:Text(L("돌아가기"))){overlay=false}
                         ForEach(0..<3,id:\.self){i in Image(systemName:["checkmark","arrow.uturn.forward","forward.end"][i]).font(.system(size:20,weight:.semibold)).foregroundStyle(selection==i ? .white:ink).frame(width:44,height:44).background(selection==i ? navy:Color.white,in:Circle()).overlay(Circle().stroke(slate,lineWidth:1)).position(x:w/2+Double(i-1)*52,y:h*0.38).accessibilityLabel([L("완료"),L("미루기"),L("건너뛰기")][i]).accessibilityAddTraits(.isButton).accessibilityAction{run(i)}}
                     }
                 }
-                // watchOS draws a white system clock; reserve a dark token surface beneath it.
-                SystemClockBackdrop()
             }.contentShape(Rectangle()).coordinateSpace(name:"orbit").simultaneousGesture(DragGesture(minimumDistance:0,coordinateSpace:.named("orbit")).onChanged { v in
                 guard !busy,!detail else{return}
                 if contact==nil {contact=token;began=v.startLocation;moved=false;held=false;wasOverlay=overlay
                     hold.begin(target:token,at:0,startX:began.x,startY:began.y)
                     let isButton=abs(began.y-footer)<24 && abs(began.x-ctaX)<bw/2
-                    if isButton && browsing==nil && primary==L("완료") && optionsEnabled {timer=Task{@MainActor in
+                    if isButton && !returning && primary==L("완료") && optionsEnabled {timer=Task{@MainActor in
                         try? await Task.sleep(nanoseconds:450_000_000)
                         guard !Task.isCancelled,contact==token,hold.activate(at:450) else{return};held=true;overlay=true;selection = -1;WKInterfaceDevice.current().play(.click)
                     }}
@@ -415,15 +584,16 @@ private struct OrbitFace:View {
                 hold.cancel()
                 if wasOverlay {let i=Int(geometry.option(width:w,height:h,x:v.location.x,y:v.location.y));overlay=false;if i>=0 && (!root||i==0){run(i)};return}
                 let dx=v.location.x-began.x,dy=v.location.y-began.y
-                if max(abs(dx),abs(dy))>35 {if abs(dy)>abs(dx){peer(dy<0 ? 1:-1)}else{root=dx>0};return}
-                if !moved && abs(began.y-footer)<24 && abs(began.x-ctaX)<bw/2 {if browsing != nil || (root && !optionsEnabled){home()}else{action(root ? "completeParent":primary==L("시작") ? "start":"complete")}}
+                if max(abs(dx),abs(dy))>35 {if abs(dy)>abs(dx){peer(dy<0 ? 1:-1)}else if dayMode{if dx<0{openDay()}}else{root=dx>0;dayBrowse=nil};return}
+                if !moved && abs(began.y-footer)<24 && abs(began.x-ctaX)<bw/2 {if returning{back()}else{action(root ? "completeParent":(primary==L("시작")||primary==L("예약 예정")) ? "start":"complete")}}
+                else if !moved && dayMode && abs(began.x-w/2)<24 && abs(began.y-h/2)<24 {openDay()}
                 else if !moved && abs(began.x-w/2)<24 && abs(began.y-h/2)<24 && optionsEnabled && browsing==nil {overlay=true}
             })
             .onAppear{orbitStep=geometry.peerAngle(width:w)}
             .focusable(!detail && !overlay).digitalCrownRotation($crown,from:-100,through:100,by:1,sensitivity:.low,isContinuous:false,isHapticFeedbackEnabled:true)
             .onChange(of:crown){_,new in if !detail && !overlay && abs(new-lastCrown)>=1 {peer(new<lastCrown ? 1:-1);lastCrown=new}}
         }.ignoresSafeArea().preferredColorScheme(.light)
-        .task(id:startMillis){guard startMillis != nil else{return};while !Task.isCancelled{try? await Task.sleep(nanoseconds:1_000_000_000);clock=Date()}}
+        .task(id:"\(startMillis ?? 0):\(day.count)"){while !Task.isCancelled{try? await Task.sleep(nanoseconds:1_000_000_000);clock=Date()}}
         .onAppear{lastParent=parent}
         .onChange(of:currentId){_,_ in if lastParent==parent && !reduceMotion{turn=orbitStep;withAnimation(.easeOut(duration:0.24)){turn=0}};lastParent=parent}
         .onChange(of:token){_,_ in home()}.onChange(of:busy){_,v in if v{cancel()}}.onChange(of:phase){_,v in if v != .active{cancel()}}.onDisappear{cancel()}

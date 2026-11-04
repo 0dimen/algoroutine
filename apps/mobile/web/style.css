@@ -66,3 +66,20 @@ button{font-weight:500;min-height:44px;border:0}.primary{display:flex;align-item
 .reschedule-item .text-button{min-height:36px;padding:0;margin-top:6px;background:none;color:var(--palette-navy);text-decoration:underline}
 .rest-options{display:grid;gap:6px;margin-top:8px}.rest-options button{text-align:left;padding:8px 12px;border-radius:10px;background:white;color:var(--palette-ink)}.rest-options button[aria-checked=true]{outline:2px solid var(--palette-navy);font-weight:650}.rest-options input{min-height:44px}
 label.check{display:flex;align-items:center;gap:8px;margin-top:12px}label.check input{width:22px;height:22px;min-height:0}
+.window-base{fill:none;stroke:var(--palette-planned);stroke-width:1.5}.window-elapsed{fill:none;stroke:var(--palette-slate);stroke-width:7}.window-remaining{fill:none;stroke:var(--palette-elapsed);stroke-width:7}.window-tick{stroke:var(--palette-orbit);stroke-width:1.5}.window-mark-tick{stroke:var(--palette-ink);stroke-width:1.5}.window-end{fill:var(--palette-slate);font-size:12px;font-variant-numeric:tabular-nums}.window-mark{fill:var(--palette-navy);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.clock-tick{stroke:var(--palette-orbit);stroke-width:1.2}.clock-tick.major{stroke:var(--palette-slate);stroke-width:1.6}.clock-label{fill:var(--palette-slate);font-size:12px;font-variant-numeric:tabular-nums}
+/* Day level ("My routine"): neighbour items on the day orbit; runs filled, reservations hollow. */
+.day-node{stroke:var(--palette-slate);stroke-width:1.5}.day-run{fill:var(--palette-planned)}.day-reservation{fill:var(--palette-white)}
+/* Day neighbours sit at ±64°, outside the 60-min window arc, so they never read as times on it. */
+.day-scene .orbit-position-0{left:21.92%;top:calc(50% - 44.94cqw)}.day-scene .orbit-position-2{left:21.92%;top:calc(50% + 44.94cqw)}
+/* "+ Add" at the day level: plain schedule or routine, always start–end. */
+.day-tools{display:flex;gap:8px;align-items:center;flex-shrink:0}.day-add{min-height:36px;padding:6px 14px;border-radius:999px;background:var(--palette-surface);color:var(--palette-navy);font-size:14px;pointer-events:auto}
+.add-kind{width:100%;display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:18px 44px 18px 18px}.add-kind small{color:var(--palette-slate);font-size:14px}.add-kind .icon{position:absolute;right:14px;top:50%;transform:translateY(-50%)}
+#add-form label{display:block;font-size:13px;color:var(--palette-slate);margin-top:16px}#add-form input:not([type=checkbox]){width:100%}#add-form label.check{display:flex;font-size:16px;color:var(--color-text-primary)}
+.time-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}.form-error{color:var(--palette-error);font-weight:600;font-size:14px;margin:10px 0 0}
+/* Clock orbit (11-04): nodes at their times, visual timer for the current item, the app's time right of the planet. */
+.timer-elapsed{fill:none;stroke:var(--palette-ink);stroke-width:2.5}.timer-remaining{fill:none;stroke:var(--palette-orange);stroke-width:8;opacity:.55;stroke-linecap:butt}.now-time{fill:var(--palette-ink);font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}.clock-node circle{stroke:var(--palette-slate);stroke-width:1.5}.clock-node.day-run circle,.clock-node.root-pending circle{fill:var(--palette-planned)}.clock-node.day-reservation circle{fill:var(--palette-white)}.clock-node.root-done circle{fill:var(--palette-navy);stroke:var(--palette-navy)}.clock-node path{fill:none;stroke:white;stroke-width:1.8}.clock-node.selected circle{stroke:var(--palette-orange);stroke-width:3}
+.pill.tag-google{background:#e8f0fe;color:#1a56b8;font-weight:650;margin-right:6px}.focus-meta .tag-google{margin:0 6px 0 0;padding:2px 8px;vertical-align:1px}
+
+/* The secret iCal address is a password-like secret: never show it on screen (screen shares, recordings). */
+#google-url{-webkit-text-security:disc;text-security:disc}

@@ -3,7 +3,7 @@ import base64, json, os, socket, struct, time, urllib.request
 from pathlib import Path
 class CDP:
     def __init__(self):
-        tabs=json.load(urllib.request.urlopen('http://127.0.0.1:9333/json'))
+        tabs=json.load(urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('CDP_PORT','9333')+'/json'))  # CDP_PORT keeps checks off a recording browser
         from urllib.parse import urlparse
         u=urlparse(next(t['webSocketDebuggerUrl'] for t in tabs if t['type']=='page'))
         self.s=socket.create_connection((u.hostname,u.port));self.s.settimeout(10);self.id=0

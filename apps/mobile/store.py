@@ -56,7 +56,20 @@ CATALOG = [{'id': 'report-start', 'version': 1, 'title': '보고서 초안 시�
             'author': {'id': 'studio', 'name': '루틴 스튜디오'}, 'source': 'library',
             'steps': [{'id': 'open', 'title': '새 문서 열기'},
                       {'id': 'headings', 'title': '소제목 세 개 적기'},
-                      {'id': 'first', 'title': '첫 문장 한 줄 쓰기'}]}]
+                      {'id': 'first', 'title': '첫 문장 한 줄 쓰기'}], 'lang': 'ko'},
+           # English samples for the store (shown when the app language is English).
+           {'id': 'grocery-run', 'version': 1, 'title': 'Grocery run in 20 minutes',
+            'description': 'Get in and out without wandering the aisles.',
+            'author': {'id': 'studio', 'name': '루틴 스튜디오'}, 'source': 'library', 'lang': 'en',
+            'steps': [{'id': 'list', 'title': 'Write the 5 things you need'},
+                      {'id': 'route', 'title': 'Go aisle by aisle, list in hand'},
+                      {'id': 'pay', 'title': 'Pay and head home'}]},
+           {'id': 'desk-reset', 'version': 1, 'title': 'Weekly desk reset',
+            'description': 'A clear desk for a clear start on Monday.',
+            'author': {'id': 'studio', 'name': '루틴 스튜디오'}, 'source': 'library', 'lang': 'en',
+            'steps': [{'id': 'clear', 'title': 'Clear everything off the desk'},
+                      {'id': 'wipe', 'title': 'Wipe it down'},
+                      {'id': 'three', 'title': 'Put back only three things'}]}]
 
 class Store:
     def __init__(self, path):

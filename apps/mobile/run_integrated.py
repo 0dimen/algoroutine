@@ -8,9 +8,11 @@ def main():
  parser=argparse.ArgumentParser();parser.add_argument('--data',default=str(DEFAULT_DATA))
  parser.add_argument('--meta',action='store_true',help='Enable Meta recommendations')
  parser.add_argument('--demo-clock',action='store_true',help='Recording only: allow shifting the server clock. Requires a rest_demo.py fixture directory')
+ parser.add_argument('--demo-ics',help='With --demo-clock: serve this .ics at /demo/google.ics for the Google Calendar import')
  parser.add_argument('--demo-reset',action='store_true',help='With --demo-clock: move the server clock back to the fixture start time')
  args=parser.parse_args();data=Path(args.data).resolve()
  if args.demo_reset and not args.demo_clock:parser.error('--demo-reset requires --demo-clock')
+ if args.demo_ics and not (args.demo_clock and Path(args.demo_ics).is_file()):parser.error('--demo-ics requires --demo-clock and an existing file')
  if args.demo_clock:
   # Never on personal data: only a disposable directory created by rest_demo.py prepare.
   marker=data/'demo-fixture.json'
@@ -26,7 +28,7 @@ def main():
  if 'JAVA_HOME' not in env:env['JAVA_HOME']=subprocess.check_output(['/usr/libexec/java_home','-v','17'],text=True).strip()
  from voice import meta_voice_session
  from meta_provider import MetaProvider
- server=make_server(data/'library.sqlite3',8780,provider_factory=MetaProvider.local if args.meta else None,voice_factory=meta_voice_session if args.meta else None)
+ server=make_server(data/'library.sqlite3',8780,provider_factory=MetaProvider.local if args.meta else None,voice_factory=meta_voice_session if args.meta else None,demo_ics=str(Path(args.demo_ics).resolve()) if args.demo_ics else None)
  process=subprocess.Popen([str(binary),'8791',str(data/'execution'),'http://127.0.0.1:8780',*(['--demo-clock'] if args.demo_clock else [])],env=env)
  try:
   print('Mobile: http://127.0.0.1:8780 | local KMP: 8791'+(' | DEMO CLOCK' if args.demo_clock else ''),flush=True)

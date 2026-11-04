@@ -68,6 +68,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(200,self.server.voice.action(path.rsplit('/',1)[-1],body))
                 if path in ['/api/execution/command','/api/execution/reservations','/api/execution/reschedule/apply','/api/execution/demo/clock']:
                     return self.execution(path,body)
+                if path == '/api/calendar/google/import':
+                    return self.respond(200,self.server.calendar.run(body))
                 if path == '/api/rest/proposal':
                     return self.respond(200,self.server.rest.propose(body))
                 if path == '/api/recommend':
@@ -84,6 +86,11 @@ class Handler(BaseHTTPRequestHandler):
                 if path in ['/api/execution/context','/api/execution/events','/api/execution/reservations','/api/execution/demo/clock']:
                     return self.execution(path)
                 q = parse_qs(urlsplit(self.path).query)
+                if path == '/api/calendar/google':
+                    return self.respond(200,self.server.calendar.status())
+                if path == '/demo/google.ics' and self.server.calendar.demo_ics:
+                    # Recording only (run_integrated.py --demo-clock --demo-ics): a fixture calendar on this loopback app.
+                    return self.respond(200,Path(self.server.calendar.demo_ics).read_bytes(),'text/calendar; charset=utf-8')
                 if path == '/api/capabilities':
                     return self.respond(200,{'meta':self.server.recommendations is not None,'voice':self.server.voice is not None})
                 if path == '/api/library':
@@ -118,7 +125,7 @@ class Handler(BaseHTTPRequestHandler):
         except (URLError,TimeoutError,OSError,ValueError):
             raise DomainError('EXECUTION_UNAVAILABLE','실행 연결을 확인해 주세요. 같은 요청으로 다시 확인할 수 있습니다.',503)
 
-def make_server(path,port=8780,execution_url='http://127.0.0.1:8791',provider_factory=None,voice_factory=None):
+def make_server(path,port=8780,execution_url='http://127.0.0.1:8791',provider_factory=None,voice_factory=None,demo_ics=None):
     server=ThreadingHTTPServer(('127.0.0.1',port),Handler)
     server.store=Store(path)
     from recommendation_service import RecommendationService
@@ -128,6 +135,8 @@ def make_server(path,port=8780,execution_url='http://127.0.0.1:8791',provider_fa
     server.execution_url=execution_url
     from rest_reschedule import RestRescheduleService
     server.rest=RestRescheduleService(execution_url,provider_factory)
+    from google_calendar import GoogleCalendarImport
+    server.calendar=GoogleCalendarImport(Path(path).parent,execution_url,demo_ics)
     return server
 
 if __name__=='__main__':
