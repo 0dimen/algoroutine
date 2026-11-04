@@ -4,6 +4,33 @@
 
 AlgoRoutine is a routine-and-schedule app for moments when your day suddenly falls apart. You say what is happening and it finds a small routine to run. If you need rest, it rearranges the rest of your day in one step. A watch walks you through one step at a time, and your place is kept so you can pick up again later.
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=YLBn9VvBgFQ">
+    <img src="https://img.youtube.com/vi/YLBn9VvBgFQ/hqdefault.jpg" alt="AlgoRoutine demo video" width="640">
+  </a>
+  <br>
+  <sub>▶ <a href="https://www.youtube.com/watch?v=YLBn9VvBgFQ">Watch the demo on YouTube</a></sub>
+</p>
+
+## In 30 seconds
+
+You're in the middle of a busy afternoon and suddenly can't go on. Here is what AlgoRoutine does in three screens:
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/images/01-recommendation.png" alt="Recommended routine" width="240"></td>
+    <td align="center" width="33%"><img src="docs/images/02-rest-proposal.png" alt="Rest schedule proposal" width="240"></td>
+    <td align="center" width="33%"><img src="docs/images/03-applied.png" alt="Updated schedule" width="240"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>1. Say what's happening</b><br>You type "I suddenly started crying. I can't focus anymore." It picks <i>Burnout reset</i>, a routine you made earlier for exactly this. Press <b>Start</b>.</td>
+    <td valign="top"><b>2. See the plan for your rest</b><br>Rest is 14:00–17:00. Plans that can move are shifted to after your rest; the required <i>Doctor call</i> stays. Change only what you want.</td>
+    <td valign="top"><b>3. Apply all at once</b><br>The day is updated in one step. Here you kept <i>Team sync</i>, and <i>Deep work block</i> is marked <i>Not this time</i> because nothing fits before your day ends.</td>
+  </tr>
+</table>
+
+Then the watch shows one small step at a time, and if you're interrupted, your place is kept.
+
 ## What it does
 
 1. **Say it → Meta recommends.** Type or speak a sentence like "I suddenly started crying. I can't focus anymore." Meta AI reads it and picks the routine that fits.
@@ -67,24 +94,21 @@ The model only proposes. Saving, starting and schedule changes are checked by th
 
 ## How it fits together
 
+```mermaid
+flowchart TD
+    phone["📱 Phone browser<br/><code>apps/mobile/web</code>"]
+    py["🐍 Python local server · <code>apps/mobile</code><br/>library (SQLite), find, recommend,<br/>voice relay, rest proposal,<br/>Google Calendar import (read-only .ics)"]
+    meta["☁️ Meta AI API<br/>(only with <code>--meta</code>)"]
+    kt["⚙️ Kotlin execution server · <code>apps/watch-proof/executionServer</code><br/>shared KMP core: runs, steps, reservations,<br/>rest validation, orbit clock and scales"]
+    watch["⌚ watchOS app · Wear OS app"]
+
+    phone -- "127.0.0.1:8780" --> py
+    py -. "proposals only" .-> meta
+    py -- "127.0.0.1:8791" --> kt
+    watch --> kt
 ```
- Phone browser (apps/mobile/web)
-        │  127.0.0.1:8780
-        ▼
- Python local server (apps/mobile) ──────▶ Meta AI API (only with --meta)
-   library (SQLite), find, recommend,
-   voice relay, rest proposal,
-   Google Calendar import (read-only .ics)
-        │  127.0.0.1:8791
-        ▼
- Kotlin execution server (apps/watch-proof/executionServer)
-   uses the shared KMP core (apps/watch-proof/shared):
-   runs, steps, reservations, rest validation,
-   orbit clock and scales
-        ▲
-        │
- watchOS app (appleWatch)  ·  Wear OS app (wearApp)
-```
+
+Meta only proposes. Every change to runs and the schedule goes through the Kotlin core, which checks the rules.
 
 ## Run it yourself in 3 steps
 
@@ -136,12 +160,6 @@ CDP_PORT=9334 python3 apps/mobile/verify_clock_browser.py
 `verify_rest_browser.py` still connects to a headless Chrome on port 9333. The checks use a new disposable fixture, a mock Meta reply where needed and a local `.ics` file (no real Google account). Screenshots go to `apps/mobile/test-results/`.
 
 The watch apps build with Xcode (watchOS simulator) and Android SDK 35 (Wear OS emulator). See [apps/watch-proof/README.md](apps/watch-proof/README.md).
-
-## Demo video
-
-[![AlgoRoutine demo video](https://img.youtube.com/vi/YLBn9VvBgFQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=YLBn9VvBgFQ)
-
-▶ Watch on YouTube: https://www.youtube.com/watch?v=YLBn9VvBgFQ
 
 ## Limits
 
