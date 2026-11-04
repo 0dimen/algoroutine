@@ -12,6 +12,20 @@ AlgoRoutine is a routine-and-schedule app for moments when your day suddenly fal
   <sub>▶ <a href="https://www.youtube.com/watch?v=YLBn9VvBgFQ">Watch the demo on YouTube</a></sub>
 </p>
 
+## Your day is an orbit
+
+<p align="center">
+  <img src="docs/images/00-orbit.png" alt="The day shown as a clock orbit: the current task is an orange planet at 14:00, and its steps circle it on a small ring" width="560">
+</p>
+
+Instead of a list, your day is drawn as a clock.
+
+- **The orange planet is what you're doing now.** It sits at the real time on the orbit (here, *Start a report* at 14:00).
+- **Every other task sits at its own time.** The empty circles further along the orbit are what comes next.
+- **Each task's steps orbit the planet.** Go one level down and that small ring becomes the whole clock, so you can follow one step at a time.
+
+You can turn the clock to look around; one tap on the orange planet brings you back to "now".
+
 ## In 30 seconds
 
 You're in the middle of a busy afternoon and suddenly can't go on. Here is what AlgoRoutine does in three screens:
