@@ -1,0 +1,24 @@
+{
+  "version": "2026-11-03-v1-before-model-output",
+  "scope": "Synthetic routine selection, not clinical outcomes or general benchmark performance",
+  "candidates": [
+    {"id":"report-mine","version":1,"source":"mine","title":"Start a report","description":"Turn a blank page into a heading and three key points.","steps":[{"id":"a","title":"Open a blank document"},{"id":"b","title":"Write a working heading"},{"id":"c","title":"List three key points"}]},
+    {"id":"breathe","version":1,"source":"collected","title":"Pause and breathe","description":"A short pause when you feel overwhelmed or tense.","steps":[{"id":"a","title":"Put both feet on the floor"},{"id":"b","title":"Take a few comfortable breaths"},{"id":"c","title":"Name one thing you can do next"}]},
+    {"id":"inbox","version":1,"source":"mine","title":"Sort your inbox","description":"Review unread email and pick one reply.","steps":[{"id":"a","title":"Open your unread email"},{"id":"b","title":"Choose one message to reply to"}]},
+    {"id":"purchase","version":1,"source":"library","title":"Check a purchase decision","description":"Pause before buying something that suddenly feels irresistible.","steps":[{"id":"a","title":"Write what you would use the item for"},{"id":"b","title":"Check the total price against your budget"},{"id":"c","title":"Write one reason to wait before buying"}]},
+    {"id":"meeting","version":1,"source":"library","title":"Prepare for a meeting","description":"Clarify the purpose and questions before a meeting.","steps":[{"id":"a","title":"Open the meeting invitation"},{"id":"b","title":"Write the outcome you want"}]},
+    {"id":"report-library","version":1,"source":"library","title":"Begin a report draft","description":"Start a report with a title and an outline.","steps":[{"id":"a","title":"Create a document"},{"id":"b","title":"Add a title and an outline"}]}
+  ],
+  "cases": [
+    {"id":"exact-report","language":"en","query":"Start a report","acceptable":["report-mine","report-library"],"preferred":"report-mine","rationale":"Direct title; both report routines fit, personal routine should precede library."},
+    {"id":"paraphrase-writing","language":"en","query":"I keep staring at an empty page instead of writing my work document.","acceptable":["report-mine","report-library"],"rationale":"Concrete writing-start task; no need to infer calendar context."},
+    {"id":"exact-breathe","language":"en","query":"Pause and breathe","acceptable":["breathe"],"rationale":"Direct title."},
+    {"id":"paraphrase-overwhelm","language":"en","query":"Everything feels too much right now. I need a moment to settle down.","acceptable":["breathe"],"rationale":"Brief calming pause matches explicitly described request; no diagnosis implied."},
+    {"id":"exact-inbox","language":"en","query":"Sort your inbox","acceptable":["inbox"],"rationale":"Direct title."},
+    {"id":"purchase","language":"en","query":"I really want to buy this gadget immediately. Help me check whether that is a good idea.","acceptable":["purchase"],"rationale":"Explicit purchase evaluation."},
+    {"id":"no-fit","language":"en","query":"Give me step-by-step instructions to replace a punctured bicycle inner tube.","acceptable":[],"rationale":"No candidate concerns bicycle repair; do not force an unrelated match."},
+    {"id":"korean-report","language":"ko","query":"업무 보고서 첫 줄을 못 쓰고 있어. 작성을 시작하고 싶어.","acceptable":["report-mine","report-library"],"rationale":"Cross-language task meaning; fixture intentionally has English content."},
+    {"id":"korean-purchase","language":"ko","query":"지금 사고 싶은 물건이 있는데 충동구매인지 따져보고 싶어.","acceptable":["purchase"],"rationale":"Cross-language purchase decision."},
+    {"id":"ambiguous","language":"en","query":"I do not know what to do.","acceptable":null,"rationale":"Insufficient task context. Descriptive output only; excluded from accuracy denominator."}
+  ]
+}

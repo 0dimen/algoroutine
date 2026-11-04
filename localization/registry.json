@@ -1,0 +1,4 @@
+{
+  "en": {"name":"English","nativeName":"English","speechTag":"en-US","speechBias":"English","direction":"ltr"},
+  "ko": {"name":"Korean","nativeName":"한국어","speechTag":"ko-KR","speechBias":"Korean","direction":"ltr"}
+}
