@@ -15,7 +15,7 @@ import kotlinx.serialization.Serializable
 
 object OrbitScales {
     val DAY = OrbitScale("day", windowMinutes=120, tickMinutes=10, labelEveryMinutes=60)
-    val ROUTINE = OrbitScale("routine", windowMinutes=30, tickMinutes=5, labelEveryMinutes=15)
+    val ROUTINE = OrbitScale("routine", windowMinutes=30, tickMinutes=5, labelEveryMinutes=10)
     val STEP = OrbitScale("step", windowMinutes=10, tickMinutes=1, labelEveryMinutes=5)
     val all:List<OrbitScale> = listOf(DAY, ROUTINE, STEP)
     /** Planned length of one step when the routine has no time window (OrbitClock.steps). */

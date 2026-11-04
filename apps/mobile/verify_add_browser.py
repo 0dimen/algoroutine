@@ -94,7 +94,7 @@ def main():
             to_day_level()
             for _ in range(10):
                 if c.js(h1+"==='Team sync'&&document.querySelector('.focus-meta').textContent.includes('17:00–17:30')"):break
-                c.js("document.querySelector('.orbit-position-2')?.click()");time.sleep(.35)
+                c.js("(n=>(n.find(b=>(b.getAttribute('aria-label')||'').includes('Team sync'))||n.sort((a,b)=>b.dataset.angle-a.dataset.angle)[0])?.click())([...document.querySelectorAll('.day-scene [data-node]')])");time.sleep(.6)  # tap the node on the clock (or the next later one)
             check('browse to Team sync 17:00 on the day orbit',h1+"==='Team sync'&&document.querySelector('.focus-meta').textContent.includes('17:00–17:30')")
             shot('4c-day-plain-ready')
             click('[data-day-open]');wait("document.querySelector('[data-reservation]:not([disabled])')")

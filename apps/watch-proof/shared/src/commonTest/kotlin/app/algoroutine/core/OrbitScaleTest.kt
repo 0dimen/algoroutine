@@ -33,7 +33,7 @@ class OrbitScaleTest {
     @Test fun routineAndStepScales() {
         val r=OrbitScales.ticks(OrbitScales.ROUTINE, at(14,2), kst)
         assertEquals(listOf(at(13,50),at(13,55),at(14,0),at(14,5),at(14,10),at(14,15)), r.map{it.atMillis})
-        assertEquals(listOf(at(14,0),at(14,15)), r.filter{it.label}.map{it.atMillis})
+        assertEquals(listOf(at(13,50),at(14,0),at(14,10)), r.filter{it.label}.map{it.atMillis})
         val s=OrbitScales.ticks(OrbitScales.STEP, at(14,2,30), kst)
         assertEquals(10, s.size); assertEquals(at(13,58), s.first().atMillis); assertEquals(at(14,7), s.last().atMillis)
     }

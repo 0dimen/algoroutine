@@ -54,14 +54,14 @@ def main():
             r1=nodes();check('routine: upcoming steps drawn at their times',len(r1)>=1,r1)
             api('/api/execution/demo/clock',{'advanceMinutes':1});step('routine','clock-phone-routine-2.png','14:03')
             r2=nodes();check('routine: one minute later the nodes moved up',len(r1)==len(r2) and all(b<a for a,b in zip(r1,r2)),(r1,r2))
-            c.js("document.querySelector('[data-show-parent]').click()");wait("document.querySelector('.day-scene')")
+            c.js("document.querySelector('[data-show-parent]').click()");wait("document.querySelector('.day-scene')");wait("!document.getAnimations().length")  # level-change camera: both orbits are on screen until it lands
             step('day','clock-phone-day-1.png','14:03')
             d1=nodes();check('day: items at their times (Team sync 14:30, Doctor call 15:00 ...)',len(d1)>=2,d1)
             api('/api/execution/demo/clock',{'advanceMinutes':1});step('day','clock-phone-day-2.png','14:04')
             d2=nodes();check('day: one minute later the nodes moved up',len(d1)==len(d2) and all(b<a for a,b in zip(d1,d2)),(d1,d2))
             api('/api/execution/demo/clock',{'advanceMinutes':10});step('day','clock-phone-day-3.png','14:14')
             c.js("document.querySelector('[data-day-home]')?.click()");time.sleep(.3)
-            c.js("document.querySelector('.day-scene [data-day-open]')?.click()");wait("document.querySelector('[data-show-parent]')")
+            c.js("document.querySelector('.day-scene [data-day-open]')?.click()");wait("document.querySelector('[data-show-parent]')");wait("!document.getAnimations().length")
             step('routine','clock-phone-routine-3.png','14:14')
     fails=[n for n,ok in checks if not ok]
     print(('FAIL ' if fails else 'PASS ')+str(len(checks)-len(fails)));sys.exit(1 if fails else 0)

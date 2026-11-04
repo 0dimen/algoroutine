@@ -3,7 +3,7 @@
 
 .quick-routines{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}.quick-routines .card{margin:0;padding:18px;min-height:150px}.quick-routines .card strong{font-size:18px}.quick-routines .card small{font-size:12px}.completion-toast{position:fixed;z-index:60;top:22px;left:50%;transform:translateX(-50%);background:var(--palette-navy);color:white;border-radius:30px;padding:9px 20px;box-shadow:0 6px 24px #14243d22;font-size:14px;pointer-events:none}.parent-time-base,.parent-time-elapsed{fill:none;stroke:var(--palette-slate);stroke-width:5}.parent-time-elapsed{stroke:var(--palette-elapsed)}.orbit-hit[data-options]{border-radius:50%}.focus-view{min-height:590px;display:flex;flex-direction:column}.focus-view>.focus-footer{margin-top:auto}.orbit-scene{flex-shrink:0}.focus-view>.row:first-child{margin-bottom:0}@media(max-width:350px){.quick-routines{grid-template-columns:1fr}.focus-view{min-height:550px}}
 
-.orbit-position-0{left:39.804%;top:10.663%}.orbit-position-1{left:50%;top:50%}.orbit-position-2{left:39.804%;top:89.337%}
+.orbit-position-0{left:39.804%;top:10.663%}.orbit-position-1{left:var(--planet-x,62%);top:50%}.orbit-position-2{left:39.804%;top:89.337%}
 
 .step-reorder{grid-column:1 / -1;display:flex;gap:8px;justify-content:flex-end}.step-reorder button{min-height:40px;padding:5px 16px}.root-orbit{width:100%;max-height:190px;display:block}.root-pending{fill:var(--palette-planned)}.root-done{fill:var(--palette-navy)}.reservation-card{background:white;border:1px solid var(--palette-planned)}
 
@@ -50,13 +50,13 @@ button{font-weight:500;min-height:44px;border:0}.primary{display:flex;align-item
 #content[data-view=editor] label{font-size:13px;color:var(--palette-slate)}#content[data-view=editor] #steps{counter-reset:editor-step}.step{padding:16px;background:var(--palette-surface);border-radius:16px;counter-increment:editor-step}.step:before{content:counter(editor-step);grid-column:1/-1;font-size:13px;color:var(--palette-slate)}.step input{background:white}.step-reorder{gap:6px}.step-reorder button{background:white;min-width:44px}.state-copy{margin-top:80px}.loading-orbit{width:44px;height:44px;border:1.5px solid var(--palette-planned);border-right-color:var(--palette-orange);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 @media(max-height:680px){.current-title{top:78px}.focus-title{max-height:110px}.card-reading{max-height:210px}.state-copy{margin-top:32px}}
 @media(max-width:350px){.app{padding:0}.orbit-scene{margin:0}.quick-routines{grid-template-columns:1fr}.focus-view{min-height:0}.option-buttons button{height:70px}.option-buttons{gap:12px}}
-.app{container-type:inline-size}.orbit-position-0{left:35.355%;top:calc(50% - 35.355cqw)}.orbit-position-1{left:50%;top:50%}.orbit-position-2{left:35.355%;top:calc(50% + 35.355cqw)}.child-hit{left:calc(50% + 34px);top:50%}
+.app{container-type:inline-size}.orbit-position-0{left:35.355%;top:calc(50% - 35.355cqw)}.orbit-position-1{left:var(--planet-x,62%);top:50%}.orbit-position-2{left:35.355%;top:calc(50% + 35.355cqw)}.child-hit{left:calc(50% + 34px);top:50%}
 /* Keep orbital context outside the title/metadata reading area on short screens. */
-.orbit-scene svg{clip-path:inset(230px 0 100px 0)}
+.orbit-scene svg{clip-path:inset(216px 0 100px 0)}
 .focus-title{mask-image:linear-gradient(to bottom,#000 calc(100% - 8px),transparent)}
 .orbit-scene .root-pending{stroke:var(--palette-orbit);stroke-width:1.5}
 .option-overlay:focus{outline:none}
-@media(min-height:681px){.orbit-scene svg{clip-path:inset(190px 0 100px 0)}}
+@media(min-height:681px){.orbit-scene svg{clip-path:inset(176px 0 100px 0)}}
 #content[data-view=current]:not(:has(.focus-view)){inset:88px 24px 100px;overflow:auto;padding-bottom:24px}
 
 /* Rest reschedule proposal: original → new time, or cancelled with reason. */
@@ -83,3 +83,8 @@ label.check{display:flex;align-items:center;gap:8px;margin-top:12px}label.check 
 
 /* The secret iCal address is a password-like secret: never show it on screen (screen shares, recordings). */
 #google-url{-webkit-text-security:disc;text-security:disc}
+
+/* Browsing turns the clock: the centre shows the item you are looking at, the orange planet stays at the real "now" on the orbit. */
+.planet.browsing{fill:var(--palette-white);stroke:var(--palette-orange);stroke-width:3}
+.planet-now{fill:var(--palette-orange)}
+.parent-orbit{stroke:var(--palette-slate);stroke-width:1.2;opacity:.28}

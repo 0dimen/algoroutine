@@ -39,11 +39,11 @@ def main():
             # routine level: the running routine's steps
             wait("document.querySelector('[data-show-parent]')")
             r=json.loads(ticks());check('routine level draws clock ticks (30 min window, 5 min)',5<=len(r)<=7,len(r))
-            check('routine level labels sit on quarter hours',all(l.split(':')[1] in ('00','15','30','45') for l in labels().split(',') if l),labels())
+            check('routine level labels sit on 10-minute marks',all(l.split(':')[1][1]=='0' for l in labels().split(',') if l),labels())
             shot('ticks-1-routine.png')
             # day level: My routine
-            c.js("document.querySelector('[data-show-parent]').click()");wait("document.querySelector('.day-scene')")
-            d=json.loads(ticks());check('My routine draws clock ticks (2 h window, 10 min)',11<=len(d)<=13,len(d))
+            c.js("document.querySelector('[data-show-parent]').click()");wait("document.querySelector('.day-scene')");wait("!document.getAnimations().length")  # level-change camera: both orbits are on screen until it lands
+            d=json.loads(ticks());check('My routine draws clock ticks (2 h window, 10 min; ~220° of the circle visible)',11<=len(d)<=16,len(d))
             check('My routine labels are whole hours',labels() and all(l.endswith(':00') for l in labels().split(',')),labels())
             shot('ticks-2-day.png')
             first=c.js("document.querySelector('.day-scene .clock-tick').getAttribute('d')")
