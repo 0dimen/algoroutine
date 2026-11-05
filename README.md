@@ -2,6 +2,13 @@
 
 **Stop safely. Come back to where you were.**
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/hero-change-of-plans.png" alt="A change of plans. Not the end of your day. Say what happened. Take the next small step."></td>
+    <td width="50%"><img src="docs/images/hero-one-task.png" alt="One task. On your wrist. Need more detail? See the smaller steps."></td>
+  </tr>
+</table>
+
 AlgoRoutine is a routine-and-schedule app for moments when your day suddenly falls apart. You say what is happening and it finds a small routine to run. If you need rest, it rearranges the rest of your day in one step. A watch walks you through one step at a time, and your place is kept so you can pick up again later.
 
 <p align="center">
